@@ -1,0 +1,43 @@
+{
+  "date": "2026-11-08",
+  "image": "/v1/outfits/today/image",
+  "items": [
+    {
+      "itemId": "w_04",
+      "slot": "top",
+      "category": "sweater",
+      "label": "クルーネックニット",
+      "layer": "inner",
+      "color": "アイボリー",
+      "pattern": "ケーブル編み",
+      "materialGuess": "ウール",
+      "image": "/v1/wardrobe/w_04/image",
+      "createdAt": "2026-11-07T08:20:00+09:00"
+    },
+    {
+      "itemId": "w_05",
+      "slot": "top",
+      "category": "top, t-shirt, sweatshirt",
+      "label": "白T シャツ",
+      "layer": "inner",
+      "color": "ホワイト",
+      "pattern": "無地",
+      "materialGuess": "コットン",
+      "image": "/v1/wardrobe/w_05/image",
+      "createdAt": "2026-11-06T08:05:00+09:00"
+    },
+    {
+      "itemId": "w_06",
+      "slot": "outer",
+      "category": "coat",
+      "label": "ステンカラーコート",
+      "layer": "outer",
+      "color": "ベージュ",
+      "pattern": "無地",
+      "materialGuess": "ポリエステル",
+      "image": "/v1/wardrobe/w_06/image",
+      "createdAt": "2026-11-07T08:20:00+09:00",
+      "memo": "古着"
+    }
+  ]
+}

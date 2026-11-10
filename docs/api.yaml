@@ -1,0 +1,1231 @@
+openapi: 3.1.0
+info:
+  title: df-hack26 API
+  version: 0.1.0
+  description: |
+    アプリと Web デモが呼ぶ API の正本。2 つのサービスに分かれる。
+    - `api` (軽い): 下の vision 以外の全部
+    - `vision` (重い): 全身写真の処理 (`/v1/outfits/process`) だけ
+
+    共通の決まり:
+    - 全部のリクエストに `Authorization: Bearer <Firebase の ID トークン>` が要る (Web デモは匿名ログインのトークン)
+    - 時刻は ISO 8601 (例 `2026-11-08T10:15:00+09:00`)
+    - 画像は Storage の URL では渡さない。`/v1/...` の画像の口から、同じ認証で取る (透かしは入れない)
+    - 見る側に返す ID は使い捨てのカード ID (`cardId`) と、カードの中だけで通じる服の番号 (`cardItemId`) だけ。uid・匿名 ID・手持ちの服の id は返さない
+    - エラーは `Error` の形。HTTP の状態と `code` で分ける
+    - 見本の応答は `docs/api-examples/` にある。サーバが無くても画面を作れる
+servers:
+  - url: https://api-591807217114.asia-northeast1.run.app
+    description: api (Cloud Run、asia-northeast1)
+  - url: https://vision-591807217114.asia-northeast1.run.app
+    description: vision (Cloud Run、asia-northeast1)
+security:
+  - firebaseIdToken: []
+
+tags:
+  - name: me
+    description: 自分のこと (名前、公開の状態、今日見られた回数)
+  - name: outfit
+    description: 今日のコーデの登録 (見られる側)
+  - name: publish
+    description: 今日の公開と匿名 ID
+  - name: wardrobe
+    description: 手持ち (クローゼット)
+  - name: nearby
+    description: 近くのコーデを見る (見る側)
+  - name: match
+    description: 手持ちとの照合と着用イメージ
+  - name: safety
+    description: ブロックと通報
+  - name: friends
+    description: 実際の友人どうしのフレンド (フレンドコードか QR で交換、相互承認)。すれ違いのカードからは追加できない
+  - name: social
+    description: いいね・保存・通知・プロフィール画像
+  - name: demo
+    description: Web デモと壇上の練習のための口
+
+paths:
+  /v1/me:
+    get:
+      tags: [me]
+      summary: 自分の状態
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+              examples: { sample: { $ref: "#/components/examples/me" } }
+    patch:
+      tags: [me]
+      summary: 名前を変える
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [displayName]
+              properties:
+                displayName: { type: string, minLength: 1, maxLength: 20 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+
+  /v1/me/photo:
+    put:
+      tags: [me]
+      summary: 着用イメージに使う自分の全身写真を置く (アプリのカメラで撮った物だけ)
+      description: 素顔のまま置く。本人にしか使わない。置き直すと前の写真は消える
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [photo, capturedWith]
+              properties:
+                photo: { type: string, format: binary, description: JPEG、長辺 2048px まで }
+                capturedWith: { type: string, enum: [camera], description: ギャラリーから選んだ物は受けない }
+      responses:
+        "204": { description: 置いた }
+    delete:
+      tags: [me]
+      summary: 自分の全身写真を消す
+      responses:
+        "204": { description: 消した }
+
+  /v1/outfits/process:
+    post:
+      tags: [outfit]
+      summary: "[vision] 今日の全身写真を処理する"
+      description: |
+        `vision` のサービスで受ける。元の写真はメモリの中だけで扱い、保存しない。
+        `jobId` はアプリが作って送る。アプリは送る前に Firestore の `users/{uid}/jobs/{jobId}` (形は `Job`) の購読を始め、処理状況を確認する。完了を通知し、通知を使えない時もアプリ内で知らせる。
+        サーバは処理が終わってから (15〜25 秒) 応答する。失敗の時も 200 で、理由は `jobs` に書く。
+        処理: 背景を消す → 頭を塗る → 顔が残っていないか確かめる → Gemini で服を見つける → SAM 2.1 で服を切り抜く
+      servers:
+        - url: https://vision-591807217114.asia-northeast1.run.app
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [photo, jobId]
+              properties:
+                photo: { type: string, format: binary, description: JPEG、全身、長辺 2048px を超えたらサーバで縮める }
+                jobId: { type: string, pattern: "^[A-Za-z0-9_-]{8,64}$", description: アプリが乱数で作る }
+      responses:
+        "200":
+          description: 処理が終わった
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobId, status]
+                properties:
+                  jobId: { type: string }
+                  status: { type: string, enum: [succeeded, failed] }
+              example: { jobId: "job_01JC8Q2x", status: "succeeded" }
+        "400":
+          description: "写真を読めない、jobId の形が違う (`code: validation`)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: "匿名ログイン (`code: forbidden`)。匿名は uid を作り直せて回数の上限が効かないので、写真の処理は Google でログインした人だけ"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: "同じ jobId が既にある (`code: conflict`)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/QuotaExceeded" }
+
+  /v1/jobs/{jobId}/images/{name}:
+    get:
+      tags: [outfit]
+      summary: "処理の結果の画像 (処理後の着姿 `outfit`、服の切り抜き `item-<n>`)"
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string } }
+        - { name: name, in: path, required: true, schema: { type: string }, example: item-0 }
+      responses:
+        "200":
+          description: PNG (透過あり)
+          content:
+            image/png: {}
+
+  /v1/jobs/{jobId}/same-items:
+    get:
+      tags: [outfit]
+      summary: 処理の結果の服ごとに、手持ちにもうある同じ服の候補を返す (同じ服の判定、tasks の L1)
+      description: |
+        S9 (アイテムを確認) で「これでは?」と出すため。服ごとに、手持ちの同じ区分の服を切り抜きのベクトル (`gemini-embedding-2`) で近い順に 5 着まで集め、
+        `gemini-3.8-flash` に同じ服を 1 着選ばせる。どれでもない服は返さない (聞かずに新しい服にする)。まとめるかは本人が 1 タップで決め、
+        PUT /v1/outfits/today の `sameAs` で送る。検索は本人の手持ちだけ。数秒かかる
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [index, wardrobeItem]
+                      properties:
+                        index: { type: integer, description: Job.result.items の何番目か }
+                        wardrobeItem: { $ref: "#/components/schemas/WardrobeItem" }
+                        reason: { type: string, description: 同じと見た理由 (日本語、1 文) }
+        "404": { description: jobId が無い }
+        "409":
+          description: "処理が終わっていない (`code: not_ready`)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/QuotaExceeded" }
+        "503": { $ref: "#/components/responses/AiDisabled" }
+
+  /v1/outfits/today:
+    get:
+      tags: [outfit]
+      summary: 今日のコーデ
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TodayOutfit" }
+              examples: { sample: { $ref: "#/components/examples/todayOutfit" } }
+        "404": { description: 今日はまだ登録していない }
+    put:
+      tags: [outfit]
+      summary: 処理の結果を確かめて、今日のコーデと手持ちに登録する
+      description: S9 の「コーデを登録」と、登録済みの今日のコーデの更新。外した服は送らない。更新時は date と jobId が現在のコーデに一致する必要があり、items は保存済みの手持ちと本人用メモだけを送る。editDate を付けずに同じ jobId で送り直すと、新しく作らずに前の結果を返す (通信が切れた時に安全にやり直せる)。登録と更新の時に、Firestore の `users/{uid}/dailyOutfits/{date}` に `outfitImage` (着姿の画像の口) と `snapshot` (服の名前・属性・メモ・画像の口の写し)・`itemNotes` を置く。カレンダーはこれを読む (手持ちから服を消しても、その日の服を投稿時点のまま見られる)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jobId, items]
+              properties:
+                jobId: { type: string }
+                editDate: { type: string, format: date, description: 登録済みの今日のコーデを編集する時だけ指定する日付 }
+                items:
+                  type: array
+                  maxItems: 20
+                  items:
+                    oneOf:
+                      - type: object
+                        required: [index]
+                        additionalProperties: false
+                        properties:
+                          index: { type: integer, description: Job.result.items の検出番号 }
+                          memo: { type: string, maxLength: 100, description: ブランド名など (任意) }
+                          sameAs: { type: string, description: 同じ服として選んだ手持ちの id。指定した場合はコーデにだけ追加する }
+                      - type: object
+                        required: [wardrobeItemId]
+                        additionalProperties: false
+                        properties:
+                          wardrobeItemId: { type: string, description: 追加する本人の手持ちの id }
+                          memo: { type: string, maxLength: 100, description: コーデ専用のメモ。省略時は手持ちのメモを使う }
+                      - type: object
+                        required: [memo]
+                        additionalProperties: false
+                        properties:
+                          memo: { type: string, minLength: 1, maxLength: 100, description: 写真がないアイテムの本人用メモ。空白だけは不可 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TodayOutfit" }
+        "409":
+          description: 処理が終わっていない、顔が残っている、または編集中に日付や今日のコーデが変わった
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/outfits/today/image:
+    get:
+      tags: [outfit]
+      summary: 今日の処理後の着姿 (自分の物)
+      responses:
+        "200": { description: PNG, content: { image/png: {} } }
+
+  /v1/publish:
+    put:
+      tags: [publish]
+      summary: 今日の公開を切り替える
+      description: |
+        `nearby` にすると、その日の残りの匿名 ID (5 分の枠ごとに 1 つ) をまとめて返す。端末はその時刻の枠の ID を選んで発信する。
+        公開はその日の 24 時に自動で切れる。初期は `private`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [visibility]
+              properties:
+                visibility: { type: string, enum: [nearby, private] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublishState" }
+              examples: { sample: { $ref: "#/components/examples/publishState" } }
+        "409":
+          description: 今日のコーデがまだ無い
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/wardrobe:
+    get:
+      tags: [wardrobe]
+      summary: 手持ちの一覧
+      parameters:
+        - name: slot
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/Slot" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/WardrobeItem" }
+              examples: { sample: { $ref: "#/components/examples/wardrobe" } }
+
+  /v1/wardrobe/{itemId}:
+    delete:
+      tags: [wardrobe]
+      summary: 手持ちから外す (その日のコーデに写した分は残る)
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: 外した }
+
+  /v1/wardrobe/{itemId}/image:
+    get:
+      tags: [wardrobe]
+      summary: 手持ちの服の切り抜き (自分の物)
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: PNG (透過あり), content: { image/png: {} } }
+
+  /v1/nearby:
+    post:
+      tags: [nearby]
+      summary: 受け取った匿名 ID を、近くのコーデのカードに変える
+      description: |
+        アプリを開いた時に、直近 5 分に受け取った ID を送る。
+        返すのは、本人が今日公開している人の着姿だけ。見る人も今日公開している時だけ返す (お互いさま)。
+        同じ人は見る人ごとに 1 日 1 回 (2 回目以降は返さない)。ブロックした人は返さない。
+        並びは受け取った新しさと電波の強さの順。距離と方向は返さない
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sightings]
+              properties:
+                sightings:
+                  type: array
+                  maxItems: 200
+                  items:
+                    type: object
+                    required: [id, lastSeenAt]
+                    properties:
+                      id: { type: string, pattern: "^[0-9a-f]{22}$", description: 匿名 ID (11 バイトの 16 進) }
+                      lastSeenAt: { type: string, format: date-time }
+                      rssi: { type: integer, description: 受信の強さ (dBm) }
+                      txPower: { type: integer, description: 発信に載っていた送信の強さ }
+            examples: { sample: { $ref: "#/components/examples/nearbyRequest" } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cards, viewerPublishing]
+                properties:
+                  cards:
+                    type: array
+                    items: { $ref: "#/components/schemas/Card" }
+                  viewerPublishing:
+                    type: boolean
+                    description: false の時、カードは空で返る (お互いさま)。画面で公開を促す
+              examples: { sample: { $ref: "#/components/examples/nearby" } }
+
+  /v1/cards/{cardId}/image:
+    get:
+      tags: [nearby]
+      summary: カードの着姿 (頭と背景を消した物)
+      parameters:
+        - { name: cardId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: PNG, content: { image/png: {} } }
+        "410": { $ref: "#/components/responses/CardExpired" }
+
+  /v1/cards/{cardId}/items/{cardItemId}/image:
+    get:
+      tags: [nearby]
+      summary: カードの服の切り抜き
+      parameters:
+        - { name: cardId, in: path, required: true, schema: { type: string } }
+        - { name: cardItemId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: PNG, content: { image/png: {} } }
+        "410": { $ref: "#/components/responses/CardExpired" }
+
+  /v1/match:
+    post:
+      tags: [match]
+      summary: 見た服を、手持ちと照合する
+      description: 見た服 1 着と、組み合わせる側の区分の手持ちを gemini-3.8-flash に見せる。数秒〜十数秒かかる
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cardId, cardItemId]
+              properties:
+                cardId: { type: string }
+                cardItemId: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MatchResult" }
+              examples: { sample: { $ref: "#/components/examples/match" } }
+        "410": { $ref: "#/components/responses/CardExpired" }
+        "429": { $ref: "#/components/responses/QuotaExceeded" }
+        "502":
+          description: "AI の応答を受け取れなかった (安全の判定で止まった時も。`code: internal`)。回数は 1 回分減る"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503": { $ref: "#/components/responses/AiDisabled" }
+
+  /v1/tryon:
+    post:
+      tags: [match]
+      summary: 着用イメージを作る
+      description: |
+        自分の全身写真 (`/v1/me/photo`) に、見た服と選んだ手持ちを gemini-nano-banana-2.1 で着せる。約 20 秒かかる (同期で返す)。
+        画像は本人にだけ返す。デモの人物でも毎回その場で作る (事前に作った物は AI を止めている時だけ、`precomputed: true` を付けて返す)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cardId, cardItemId, wardrobeItemIds]
+              properties:
+                cardId: { type: string }
+                cardItemId: { type: string }
+                wardrobeItemIds:
+                  type: array
+                  items: { type: string }
+                  maxItems: 3
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TryOn" }
+              examples: { sample: { $ref: "#/components/examples/tryon" } }
+        "409":
+          description: "自分の全身写真がまだ無い (`code: photo_required`)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "410": { $ref: "#/components/responses/CardExpired" }
+        "429": { $ref: "#/components/responses/QuotaExceeded" }
+        "502":
+          description: "AI の応答を受け取れなかった (安全の判定で止まった時も。`code: internal`)。回数は 1 回分減る"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503": { $ref: "#/components/responses/AiDisabled" }
+
+  /v1/tryon/{tryonId}/image:
+    get:
+      tags: [match]
+      summary: 着用イメージの画像 (本人だけ)
+      parameters:
+        - { name: tryonId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "PNG。下の帯に英字で「AI-generated」を焼き込む。日本語の表示はアプリが TryOn.label を出す", content: { image/png: {} } }
+
+  /v1/blocks:
+    post:
+      tags: [safety]
+      summary: カードの人をブロックする (以後は返さない)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cardId]
+              properties:
+                cardId: { type: string }
+      responses:
+        "204": { description: ブロックした }
+
+  /v1/reports:
+    post:
+      tags: [safety]
+      summary: カードを通報する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cardId, reason]
+              properties:
+                cardId: { type: string }
+                reason: { type: string, enum: [inappropriate, not_clothes, harassment, other] }
+                note: { type: string, maxLength: 200 }
+      responses:
+        "204": { description: 受け付けた }
+
+  /v1/me/profile-image:
+    put:
+      tags: [social]
+      summary: 自分のプロフィール画像と表示範囲を置く (フレンドにだけ見せる)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary, description: JPEG か PNG、10MB まで。サーバで長辺 1024px に縮めて EXIF を落とす }
+                crop: { type: string, description: '表示範囲の JSON (例 {"x":0.1,"y":0.2,"scale":1.5})。アプリが決めた形をそのまま返す' }
+      responses:
+        "204": { description: 置いた }
+        "400": { description: "画像を読めない (`code: validation`)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    get:
+      tags: [social]
+      summary: 自分のプロフィール画像
+      responses:
+        "200": { description: JPEG, content: { image/jpeg: {} } }
+        "404": { description: 無い (他人の物も 404) }
+    delete:
+      tags: [social]
+      summary: 自分のプロフィール画像を消す
+      responses:
+        "204": { description: 消した }
+
+  /v1/me/devices:
+    put:
+      tags: [social]
+      summary: プッシュ通知を受ける端末の FCM トークンを置く (起動の度とトークンが替わった時)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string, maxLength: 4096 }
+      responses:
+        "204": { description: 置いた }
+    delete:
+      tags: [social]
+      summary: この端末へのプッシュをやめる (ログアウトの時)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        "204": { description: 消した }
+
+  /v1/friends:
+    get:
+      tags: [friends]
+      summary: フレンドの一覧と、それぞれの今日の公開コーデ
+      description: 今日のコーデは、その人が今日「近くのユーザー」に公開した時だけ付く (その日の公開コーデだけ。過去の日は見せない)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [friends]
+                properties:
+                  friends: { type: array, items: { $ref: "#/components/schemas/Friend" } }
+
+  /v1/friends/{friendId}:
+    delete:
+      tags: [friends]
+      summary: フレンドを解除する (相手の一覧からも消える。相手には知らせない)
+      parameters:
+        - { name: friendId, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: 解除した }
+        "404": { description: 無い (他人の物も 404) }
+
+  /v1/friends/{friendId}/today/image:
+    get:
+      tags: [friends]
+      summary: フレンドの今日の公開コーデの着姿 (頭と背景を消した物)
+      parameters:
+        - { name: friendId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: PNG, content: { image/png: {} } }
+        "404": { description: フレンドでないか、今日は公開していない }
+
+  /v1/friends/{friendId}/today/items/{index}/image:
+    get:
+      tags: [friends]
+      summary: フレンドの今日の公開コーデの服の切り抜き
+      parameters:
+        - { name: friendId, in: path, required: true, schema: { type: string } }
+        - { name: index, in: path, required: true, schema: { type: integer }, description: FriendPost.items の何番目か }
+      responses:
+        "200": { description: PNG, content: { image/png: {} } }
+        "404": { description: フレンドでないか、今日は公開していない }
+
+  /v1/friends/{friendId}/today/items/{index}/card:
+    post:
+      tags: [friends, match]
+      summary: フレンドの今日の公開コーデの服を照合するためのカードを作る
+      description: |
+        承認済みのフレンドの、その日公開中の服だけを対象にする。返すのは選んだ服 1 着を含む使い捨てのカードで、uid や手持ちの服の id は返さない。
+        カードは 30 分または日付が変わるまで有効。カードの利用時にもフレンド関係、公開状態、対象の服が変わっていないことを確認する。
+        フレンドの公開コーデを見る操作であり、近接検出の 1 日 1 回の記録や閲覧数は増やさない。
+        カードの発行回数は近接検出と同じ利用者ごとの上限に含む。
+      parameters:
+        - { name: friendId, in: path, required: true, schema: { type: string } }
+        - { name: index, in: path, required: true, schema: { type: integer, minimum: 0 }, description: FriendPost.items の何番目か }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date, slot, label, color]
+              properties:
+                date: { type: string, format: date, description: 表示中の FriendPost.date }
+                slot: { type: string }
+                label: { type: string }
+                color: { type: string }
+      responses:
+        "200":
+          description: 照合する服 1 着のカード
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Card" }
+        "404": { description: フレンドでないか、今日は公開していない }
+        "409": { description: 表示後にコーデが変わったため、一覧の読み直しが必要 }
+        "403": { description: 匿名ユーザーはフレンドを利用できない }
+        "429": { $ref: "#/components/responses/QuotaExceeded" }
+
+  /v1/friends/{friendId}/profile-image:
+    get:
+      tags: [friends]
+      summary: フレンドのプロフィール画像
+      parameters:
+        - { name: friendId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: JPEG, content: { image/jpeg: {} } }
+        "404": { description: 無い (他人の物も 404) }
+
+  /v1/friends/requests:
+    get:
+      tags: [friends]
+      summary: 届いた申請と送った申請 (未処理の物だけ)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [incoming, outgoing]
+                properties:
+                  incoming: { type: array, items: { $ref: "#/components/schemas/FriendRequest" } }
+                  outgoing: { type: array, items: { $ref: "#/components/schemas/FriendRequest" } }
+    post:
+      tags: [friends]
+      summary: フレンドコードで申請を送る (QR はアプリがフレンドコードを読む)
+      description: "相手が先に自分へ申請を送っていた時は、その場でフレンドになる (`status: accepted`)。1 日の回数に上限がある"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [friendCode]
+              properties:
+                friendCode: { type: string, description: 相手の Me.friendCode (大文字小文字と空白は問わない) }
+      responses:
+        "201":
+          description: 送った
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FriendRequest" }
+        "400": { description: "自分のコード (`code: validation`)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { description: "そのコードの人がいない (`code: not_found`)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "もうフレンドか、申請済み (`code: conflict`)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/QuotaExceeded" }
+
+  /v1/friends/requests/{requestId}/accept:
+    post:
+      tags: [friends]
+      summary: 届いた申請を承認する
+      parameters:
+        - { name: requestId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: フレンドになった
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Friend" }
+        "404": { description: 無い (他人の物も 404) }
+
+  /v1/friends/requests/{requestId}/decline:
+    post:
+      tags: [friends]
+      summary: 届いた申請を辞退する (相手には知らせない)
+      parameters:
+        - { name: requestId, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: 辞退した }
+        "404": { description: 無い (他人の物も 404) }
+
+  /v1/friends/requests/{requestId}:
+    delete:
+      tags: [friends]
+      summary: 送った申請を取り消す
+      parameters:
+        - { name: requestId, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: 取り消した }
+        "404": { description: 無い (他人の物も 404) }
+
+  /v1/likes/friends/{friendId}:
+    put:
+      tags: [social]
+      summary: フレンドの今日の公開コーデにいいねする (もう一度送っても 1 つ)
+      parameters:
+        - { name: friendId, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: いいねした }
+        "404": { description: フレンドでないか、今日は公開していない }
+    delete:
+      tags: [social]
+      summary: いいねを取り消す
+      parameters:
+        - { name: friendId, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: 取り消した }
+
+  /v1/likes/cards/{cardId}:
+    put:
+      tags: [social]
+      summary: 近くのコーデのカードにいいねする。相手には「近くの人から」とだけ届き、誰かは分からない
+      parameters:
+        - { name: cardId, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: いいねした }
+        "410": { $ref: "#/components/responses/CardExpired" }
+    delete:
+      tags: [social]
+      summary: いいねを取り消す
+      parameters:
+        - { name: cardId, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: 取り消した }
+
+  /v1/saves:
+    get:
+      tags: [social]
+      summary: 保存した服の一覧 (新しい順)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/SavedItem" } }
+    post:
+      tags: [social]
+      summary: 見た服を保存する。保存するのは服の情報 (区分・名前・色・柄・素材) だけで、着姿と切り抜きの画像は持ち帰らない (カードの期限の後も残る)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [cardId, cardItemId]
+                  properties:
+                    cardId: { type: string }
+                    cardItemId: { type: string }
+                - type: object
+                  required: [friendId, index]
+                  properties:
+                    friendId: { type: string }
+                    index: { type: integer, description: FriendPost.items の何番目か }
+      responses:
+        "201":
+          description: 保存した
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SavedItem" }
+        "404": { description: 無い }
+        "410": { $ref: "#/components/responses/CardExpired" }
+
+  /v1/saves/{saveId}:
+    delete:
+      tags: [social]
+      summary: 保存を消す
+      parameters:
+        - { name: saveId, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: 消した }
+
+  /v1/notifications:
+    get:
+      tags: [social]
+      summary: 通知の一覧 (新しい順、50 件まで) と未読の数
+      description: |
+        通知はサーバが作る: フレンドの申請が届いた (`friend_request`)、申請が承認された (`friend_accepted`)、いいねが付いた (`like`)、
+        コーデの処理が終わった (`outfit_ready`、vision が作る)。同時に、登録した端末へプッシュする (アプリを閉じていても届く)。
+        プッシュに載せるのは通知の種類と短い文だけで、着姿の画像は載せない
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, unread]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Notification" } }
+                  unread: { type: integer }
+
+  /v1/notifications/read:
+    post:
+      tags: [social]
+      summary: 通知を既読にする (別の端末にも反映される)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids: { type: array, items: { type: string }, description: 既読にする通知。省くと全部 }
+      responses:
+        "204": { description: 既読にした }
+
+  /v1/demo/nearby:
+    post:
+      tags: [demo]
+      summary: Web デモの模擬の検出。デモ用の人物のカードを返す
+      description: "Web の審査員 (匿名) と、実機無しで試すアプリ (Google でログインした人) が呼べる。返すのはデモ用の架空の人物 (`WEB_DEMO_UIDS`) だけ。BLE を使わずに `/v1/nearby` と同じ形を返す。画面に「模擬」と出すこと"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cards, viewerPublishing]
+                properties:
+                  cards:
+                    type: array
+                    items: { $ref: "#/components/schemas/Card" }
+                  viewerPublishing: { type: boolean }
+              examples: { sample: { $ref: "#/components/examples/nearby" } }
+
+  /v1/admin/demo/reset:
+    post:
+      tags: [demo]
+      summary: デモ用の uid の「1 日 1 回」の記録を消す (壇上の練習の後に使う)
+      description: "管理用。`X-Admin-Token` が要る"
+      security:
+        - adminToken: []
+      responses:
+        "204": { description: 消した }
+
+components:
+  securitySchemes:
+    firebaseIdToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
+    adminToken:
+      type: apiKey
+      in: header
+      name: X-Admin-Token
+
+  responses:
+    QuotaExceeded:
+      description: "今日の回数の上限に達した (`code: quota_exceeded`)"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    CardExpired:
+      description: "カードの期限 (見てから 30 分) が切れた (`code: card_expired`)"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    AiDisabled:
+      description: "AI を止めている (`code: ai_disabled`)。AI を止めている時は、事前に計算した結果を precomputed: true で返す (無ければこの 503)"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Slot:
+      type: string
+      description: 粗い区分
+      enum: [outer, top, bottom, dress, shoes, bag, accessory]
+
+    Layer:
+      type: string
+      enum: [outer, inner, single]
+
+    Garment:
+      type: object
+      description: 服 1 着の見た目の情報 (Gemini の推定)
+      required: [slot, label, color]
+      properties:
+        slot: { $ref: "#/components/schemas/Slot" }
+        category: { type: string, description: Fashionpedia の 27 カテゴリの英語名 (例 jacket) }
+        label: { type: string, description: 画面に出す名前 (日本語、例 デニムジャケット) }
+        layer: { $ref: "#/components/schemas/Layer" }
+        color: { type: string, description: 例 ライトブルー }
+        pattern: { type: string, description: 例 無地 }
+        materialGuess: { type: string, description: 推定であることを画面で示す }
+
+    Friend:
+      type: object
+      required: [friendId, displayName, since]
+      properties:
+        friendId: { type: string, description: このフレンドの関係の id (uid ではない) }
+        displayName: { type: string }
+        profileImage: { type: [string, "null"], description: "/v1/friends/{friendId}/profile-image。無ければ null" }
+        profileCrop: { type: [string, "null"], description: 相手が決めた表示範囲の JSON }
+        since: { type: string, format: date-time }
+        today: { oneOf: [{ $ref: "#/components/schemas/FriendPost" }, { type: "null" }], description: 今日「近くのユーザー」に公開している時だけ }
+
+    FriendPost:
+      type: object
+      required: [date, image, items, liked]
+      properties:
+        date: { type: string, format: date }
+        image: { type: string, description: "/v1/friends/{friendId}/today/image" }
+        items:
+          type: array
+          items:
+            allOf:
+              - { $ref: "#/components/schemas/Garment" }
+              - type: object
+                required: [image]
+                properties:
+                  image: { type: string, description: "/v1/friends/{friendId}/today/items/{index}/image" }
+                  memo: { type: string, description: 相手のコーデのメモ }
+        itemNotes: { type: array, items: { type: string } }
+        liked: { type: boolean, description: 自分がいいねしているか }
+
+    FriendRequest:
+      type: object
+      required: [requestId, displayName, createdAt, status]
+      properties:
+        requestId: { type: string }
+        displayName: { type: string, description: 相手の表示名 }
+        profileImage: { type: [string, "null"], description: 相手のプロフィール画像 (承認の前は出さないので常に null) }
+        createdAt: { type: string, format: date-time }
+        status: { type: string, enum: [pending, accepted] }
+
+    SavedItem:
+      allOf:
+        - { $ref: "#/components/schemas/Garment" }
+        - type: object
+          required: [saveId, savedAt, source]
+          properties:
+            saveId: { type: string }
+            savedAt: { type: string, format: date-time }
+            source: { type: string, enum: [nearby, friend], description: どこで見た服か (誰の服かは残さない) }
+
+    Notification:
+      type: object
+      required: [id, type, text, createdAt, read]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [friend_request, friend_accepted, like, outfit_ready] }
+        text: { type: string, description: 画面にそのまま出せる日本語 (例 さくらさんからフレンドの申請が届きました) }
+        createdAt: { type: string, format: date-time }
+        read: { type: boolean }
+        requestId: { type: string, description: friend_request の時、承認と辞退に使う }
+        jobId: { type: string, description: outfit_ready の時、処理の結果を開くのに使う }
+
+    Me:
+      type: object
+      required: [uid, displayName, isAnonymous, publishing, viewCountToday, hasPhoto]
+      properties:
+        uid: { type: string, description: 自分の uid (他人には返さない) }
+        displayName: { type: string }
+        isAnonymous: { type: boolean, description: Web デモの匿名ログインなら true }
+        publishing: { $ref: "#/components/schemas/PublishState" }
+        viewCountToday: { type: integer, description: 今日自分の着姿が見られた回数 (誰かは返さない) }
+        hasPhoto: { type: boolean, description: 着用イメージ用の自分の写真があるか }
+        friendCode: { type: string, description: 自分のフレンドコード (8 文字、英大文字と数字)。実際の友人に見せるか QR にして渡す }
+        profileImage: { type: [string, "null"], description: "/v1/me/profile-image。無ければ null" }
+        profileCrop: { type: [string, "null"], description: プロフィール画像の表示範囲の JSON }
+        likeCountToday: { type: integer, description: 今日自分のコーデに付いたいいねの数 (誰かは返さない) }
+        unreadNotifications: { type: integer }
+
+    PublishState:
+      type: object
+      required: [visibility]
+      properties:
+        visibility: { type: string, enum: [nearby, private] }
+        until: { type: string, format: date-time, description: 公開が切れる時刻 (その日の 24 時) }
+        broadcastIds:
+          type: array
+          description: "`nearby` にした時だけ。枠の始まりと ID の組"
+          items:
+            type: object
+            required: [slotStart, id]
+            properties:
+              slotStart: { type: string, format: date-time }
+              id: { type: string, pattern: "^[0-9a-f]{22}$" }
+
+    Job:
+      type: object
+      description: "Firestore の `users/{uid}/jobs/{jobId}`。`vision` が書き、アプリが購読する"
+      required: [status, updatedAt]
+      properties:
+        status: { type: string, enum: [queued, masking, segmenting, detecting, cutting, succeeded, failed] }
+        progress: { type: number, minimum: 0, maximum: 1 }
+        updatedAt: { type: string, format: date-time }
+        error:
+          type: object
+          properties:
+            code: { type: string, enum: [face_detected, no_person, too_many_people, ai_failed, quota_exceeded, internal] }
+            message: { type: string }
+        result:
+          type: object
+          properties:
+            outfitImage: { type: string, description: "/v1/jobs/{jobId}/images/outfit" }
+            items:
+              type: array
+              items:
+                allOf:
+                  - { $ref: "#/components/schemas/Garment" }
+                  - type: object
+                    required: [index, image, points]
+                    properties:
+                      index: { type: integer }
+                      image: { type: string, description: "/v1/jobs/{jobId}/images/item-<index>" }
+                      points:
+                        type: array
+                        description: 着姿の上で服を指す点 (0〜1000)。S9 の点の表示に使う。Firestore は配列の中の配列を持てないので {y, x} の形
+                        items:
+                          type: object
+                          required: [y, x]
+                          properties:
+                            y: { type: integer, minimum: 0, maximum: 1000 }
+                            x: { type: integer, minimum: 0, maximum: 1000 }
+
+    TodayOutfit:
+      type: object
+      required: [date, image, items]
+      properties:
+        date: { type: string, format: date }
+        image: { type: string, description: /v1/outfits/today/image }
+        jobId: { type: string, description: 本人の処理済み画像のジョブ ID。編集できるコーデに付く }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/WardrobeItem" }
+        itemNotes:
+          type: array
+          description: 写真がないアイテムの本人用メモ。ない場合は省略される
+          items: { type: string, minLength: 1, maxLength: 100 }
+
+    WardrobeItem:
+      allOf:
+        - { $ref: "#/components/schemas/Garment" }
+        - type: object
+          required: [itemId, image, createdAt]
+          properties:
+            itemId: { type: string, description: 自分の手持ちの id。他人には返さない }
+            image: { type: string, description: "/v1/wardrobe/{itemId}/image" }
+            memo: { type: string }
+            createdAt: { type: string, format: date-time }
+
+    Card:
+      type: object
+      description: 近くのコーデ 1 人分。使い捨てで、見てから 30 分で切れる
+      required: [cardId, image, items, seenAgoSec, expiresAt]
+      properties:
+        cardId: { type: string, description: 使い捨ての id。応答ごとに変わる }
+        image: { type: string, description: "/v1/cards/{cardId}/image (頭と背景を消した着姿)" }
+        seenAgoSec: { type: integer, description: 受け取ってからの秒数 (例 180 → 3 分前) }
+        expiresAt: { type: string, format: date-time }
+        isDemo: { type: boolean, description: デモ用の人物なら true }
+        items:
+          type: array
+          items:
+            allOf:
+              - { $ref: "#/components/schemas/Garment" }
+              - type: object
+                required: [cardItemId, image]
+                properties:
+                  cardItemId: { type: string, description: このカードの中だけで通じる番号 }
+                  image: { type: string, description: "/v1/cards/{cardId}/items/{cardItemId}/image" }
+
+    MatchResult:
+      type: object
+      required: [seen, combos]
+      properties:
+        seen:
+          description: 照合した見た服
+          allOf:
+            - { $ref: "#/components/schemas/Garment" }
+            - type: object
+              required: [cardItemId, image]
+              properties:
+                cardItemId: { type: string }
+                image: { type: string }
+        combos:
+          type: array
+          maxItems: 3
+          description: 合う組み合わせ (良い順)。空なら missing を見る
+          items:
+            type: object
+            required: [wardrobeItemIds, reason]
+            properties:
+              wardrobeItemIds:
+                type: array
+                items: { type: string }
+                minItems: 1
+                maxItems: 3
+                description: そのまま /v1/tryon の wardrobeItemIds に渡せる (3 着まで)
+              reason: { type: string, description: 理由 (日本語、1〜2 文) }
+        missing:
+          description: 足りない 1 着。合う物があれば null
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [slot, description]
+              properties:
+                slot: { $ref: "#/components/schemas/Slot" }
+                description: { type: string, description: 例 白の無地のスニーカー }
+        similarOwned:
+          description: 見た服と似た服をもう持っていればその 1 着 (買わなくて済む根拠)
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [wardrobeItemId, reason]
+              properties:
+                wardrobeItemId: { type: string }
+                reason: { type: string }
+        precomputed: { type: boolean, description: 事前に作った結果なら true (AI を止めている時だけ。画面にそう出す) }
+
+    TryOn:
+      type: object
+      required: [tryonId, image, label, generatedAt]
+      properties:
+        tryonId: { type: string }
+        image: { type: string, description: "/v1/tryon/{tryonId}/image" }
+        label: { type: string, description: 画面に出す表示。常に「AI による着用イメージ」 }
+        precomputed: { type: boolean, description: 事前に作った物なら true (AI を止めている時だけ。画面にそう出す) }
+        generatedAt: { type: string, format: date-time }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [unauthenticated, forbidden, not_found, validation, conflict, quota_exceeded, card_expired, ai_disabled, photo_required, no_outfit_today, face_detected, not_ready, internal]
+            message: { type: string, description: 画面にそのまま出せる日本語 }
+
+  examples:
+    me:
+      value:
+        uid: "u_8f3k2"
+        displayName: "りお"
+        isAnonymous: false
+        publishing: { visibility: "nearby", until: "2026-11-09T00:00:00+09:00" }
+        viewCountToday: 3
+        hasPhoto: true
+    publishState:
+      value:
+        visibility: "nearby"
+        until: "2026-11-09T00:00:00+09:00"
+        broadcastIds:
+          - { slotStart: "2026-11-08T10:15:00+09:00", id: "3fa91c0e7b2d4a8c61e5f0" }
+          - { slotStart: "2026-11-08T10:20:00+09:00", id: "b07e2d9c41a8f36e2c9d1b" }
+    todayOutfit:
+      externalValue: "api-examples/today-outfit.json"
+    wardrobe:
+      externalValue: "api-examples/wardrobe.json"
+    nearbyRequest:
+      value:
+        sightings:
+          - { id: "3fa91c0e7b2d4a8c61e5f0", lastSeenAt: "2026-11-08T10:17:42+09:00", rssi: -63, txPower: -7 }
+          - { id: "c41a8f36e2c9d1b07e2d9c", lastSeenAt: "2026-11-08T10:16:05+09:00", rssi: -81, txPower: -7 }
+    nearby:
+      externalValue: "api-examples/nearby.json"
+    match:
+      externalValue: "api-examples/match.json"
+    tryon:
+      value:
+        tryonId: "t_5m2q9"
+        image: "/v1/tryon/t_5m2q9/image"
+        label: "AI による着用イメージ"
+        precomputed: false
+        generatedAt: "2026-11-08T10:21:30+09:00"

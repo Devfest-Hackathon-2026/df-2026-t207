@@ -1,0 +1,11 @@
+fastapi==0.121.*
+uvicorn[standard]==0.38.*
+python-multipart
+numpy
+pillow
+opencv-python-headless
+rembg==2.0.87
+onnxruntime
+transformers==5.22.2
+google-genai==3.0.*
+firebase-admin==7.7.*

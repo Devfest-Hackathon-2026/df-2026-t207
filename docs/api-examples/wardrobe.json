@@ -1,0 +1,77 @@
+{
+  "items": [
+    {
+      "itemId": "w_01",
+      "slot": "bottom",
+      "category": "pants",
+      "label": "ワイドパンツ",
+      "layer": "single",
+      "color": "チャコール",
+      "pattern": "無地",
+      "materialGuess": "コットン",
+      "image": "/v1/wardrobe/w_01/image",
+      "createdAt": "2026-11-05T08:10:00+09:00"
+    },
+    {
+      "itemId": "w_02",
+      "slot": "bottom",
+      "category": "pants",
+      "label": "ストレートデニム",
+      "layer": "single",
+      "color": "インディゴ",
+      "pattern": "無地",
+      "materialGuess": "デニム",
+      "image": "/v1/wardrobe/w_02/image",
+      "createdAt": "2026-11-06T08:05:00+09:00"
+    },
+    {
+      "itemId": "w_03",
+      "slot": "shoes",
+      "category": "shoe",
+      "label": "白スニーカー",
+      "layer": "single",
+      "color": "ホワイト",
+      "pattern": "無地",
+      "materialGuess": "レザー",
+      "image": "/v1/wardrobe/w_03/image",
+      "createdAt": "2026-11-05T08:10:00+09:00"
+    },
+    {
+      "itemId": "w_04",
+      "slot": "top",
+      "category": "sweater",
+      "label": "クルーネックニット",
+      "layer": "inner",
+      "color": "アイボリー",
+      "pattern": "ケーブル編み",
+      "materialGuess": "ウール",
+      "image": "/v1/wardrobe/w_04/image",
+      "createdAt": "2026-11-07T08:20:00+09:00"
+    },
+    {
+      "itemId": "w_05",
+      "slot": "top",
+      "category": "top, t-shirt, sweatshirt",
+      "label": "白T シャツ",
+      "layer": "inner",
+      "color": "ホワイト",
+      "pattern": "無地",
+      "materialGuess": "コットン",
+      "image": "/v1/wardrobe/w_05/image",
+      "createdAt": "2026-11-06T08:05:00+09:00"
+    },
+    {
+      "itemId": "w_06",
+      "slot": "outer",
+      "category": "coat",
+      "label": "ステンカラーコート",
+      "layer": "outer",
+      "color": "ベージュ",
+      "pattern": "無地",
+      "materialGuess": "ポリエステル",
+      "image": "/v1/wardrobe/w_06/image",
+      "createdAt": "2026-11-07T08:20:00+09:00",
+      "memo": "古着"
+    }
+  ]
+}

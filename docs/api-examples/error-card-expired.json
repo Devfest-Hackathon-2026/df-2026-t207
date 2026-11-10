@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "card_expired",
+    "message": "このコーデはもう見られません"
+  }
+}

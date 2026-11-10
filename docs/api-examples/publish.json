@@ -1,0 +1,18 @@
+{
+  "visibility": "nearby",
+  "until": "2026-11-09T00:00:00+09:00",
+  "broadcastIds": [
+    {
+      "slotStart": "2026-11-08T10:15:00+09:00",
+      "id": "3fa91c0e7b2d4a8c61e5f0"
+    },
+    {
+      "slotStart": "2026-11-08T10:20:00+09:00",
+      "id": "b07e2d9c41a8f36e2c9d1b"
+    },
+    {
+      "slotStart": "2026-11-08T10:25:00+09:00",
+      "id": "5d2c8e1f9a07b4c63e81aa"
+    }
+  ]
+}

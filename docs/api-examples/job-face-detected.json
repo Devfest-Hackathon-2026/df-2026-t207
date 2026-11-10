@@ -1,0 +1,9 @@
+{
+  "status": "failed",
+  "progress": 0.2,
+  "updatedAt": "2026-11-08T08:21:03+09:00",
+  "error": {
+    "code": "face_detected",
+    "message": "顔が見えているため公開できません。撮りなおしてください"
+  }
+}

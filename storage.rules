@@ -1,0 +1,9 @@
+rules_version = '2';
+// Storage はアプリから全部拒否する。画像は api が本人だけにバイトで返す (docs/architecture.md の 4・5 節)
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

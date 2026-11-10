@@ -1,0 +1,9 @@
+# リポジトリの一番上から Cloud Build に上げる時に除く物 (api のビルド用)
+.git/
+app/
+poc/
+docs/mockups/
+docs/*.png
+docs/*.html
+**/__pycache__/
+**/.pytest_cache/

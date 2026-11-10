@@ -1,0 +1,11 @@
+rules_version = '2';
+// アプリ (Firebase の SDK) は本人の文書 (users/{uid} とその下: jobs・wardrobeItems・dailyOutfits・tryons) を読むだけ。
+// 書き込みは api と vision (サーバ。決まりを通らない) だけ。cards・broadcastIds・viewLog・quotas・precomputed などは読めない
+// (docs/architecture.md の 4 節)。試験は server/api/test_rules.py
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/{document=**} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

@@ -1,0 +1,14 @@
+# vision のイメージを作る。ログは Cloud Logging にだけ出す (既定のサービスアカウントでも見えるように)
+# 最初の段で、重みを Storage の build-models/ から ./models に落とす (Dockerfile の COPY models)
+steps:
+  - name: gcr.io/cloud-builders/gsutil
+    args: ["-m", "-q", "cp", "-r", "gs://project-10522535-9db8-40c0-a68.firebasestorage.app/build-models/models", "."]
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "${_IMAGE}", "."]
+images: ["${_IMAGE}"]
+substitutions:
+  _IMAGE: asia-northeast1-docker.pkg.dev/project-10522535-9db8-40c0-a68/cloud-run-source-deploy/vision:latest
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+timeout: 2400s

@@ -1,0 +1,10 @@
+# api のイメージを作る。リポジトリの一番上で実行する:
+#   gcloud builds submit --region asia-northeast1 --config server/api/cloudbuild.yaml .
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "server/api/Dockerfile", "-t", "${_IMAGE}", "."]
+images: ["${_IMAGE}"]
+substitutions:
+  _IMAGE: asia-northeast1-docker.pkg.dev/project-10522535-9db8-40c0-a68/cloud-run-source-deploy/api:latest
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -1,0 +1,85 @@
+{
+  "status": "succeeded",
+  "progress": 1,
+  "updatedAt": "2026-11-08T08:21:14+09:00",
+  "result": {
+    "outfitImage": "/v1/jobs/job_01JC8Q2/images/outfit",
+    "items": [
+      {
+        "index": 0,
+        "slot": "outer",
+        "category": "jacket",
+        "label": "ライトジャケット",
+        "layer": "outer",
+        "color": "アイボリー",
+        "pattern": "無地",
+        "materialGuess": "コットン",
+        "image": "/v1/jobs/job_01JC8Q2/images/item-0",
+        "points": [
+          {
+            "y": 380,
+            "x": 520
+          },
+          {
+            "y": 450,
+            "x": 610
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "slot": "top",
+        "category": "top, t-shirt, sweatshirt",
+        "label": "スウェット",
+        "layer": "inner",
+        "color": "ライトピンク",
+        "pattern": "星のプリント",
+        "materialGuess": "コットン",
+        "image": "/v1/jobs/job_01JC8Q2/images/item-1",
+        "points": [
+          {
+            "y": 400,
+            "x": 470
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "slot": "bottom",
+        "category": "pants",
+        "label": "カーゴパンツ",
+        "layer": "single",
+        "color": "チャコール",
+        "pattern": "無地",
+        "materialGuess": "ナイロン",
+        "image": "/v1/jobs/job_01JC8Q2/images/item-2",
+        "points": [
+          {
+            "y": 700,
+            "x": 500
+          },
+          {
+            "y": 780,
+            "x": 540
+          }
+        ]
+      },
+      {
+        "index": 3,
+        "slot": "shoes",
+        "category": "shoe",
+        "label": "白スニーカー",
+        "layer": "single",
+        "color": "ホワイト",
+        "pattern": "無地",
+        "image": "/v1/jobs/job_01JC8Q2/images/item-3",
+        "points": [
+          {
+            "y": 955,
+            "x": 470
+          }
+        ]
+      }
+    ]
+  }
+}

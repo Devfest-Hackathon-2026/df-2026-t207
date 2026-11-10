@@ -1,0 +1,20 @@
+[versions]
+# apps/kanade-mobile で組めている組み合わせに揃える (手元の Gradle の cache で組める)
+agp = "9.4.1"
+kotlin = "2.4.21"
+composeBom = "2026.09.00"
+activityCompose = "1.13.0"
+nearby = "19.5.1"
+# Play services が引く fragment 1.1.0 は registerForActivityResult と合わない (lint の InvalidFragmentVersionForActivityResult)
+fragment = "1.5.4"
+
+[libraries]
+compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+fragment = { group = "androidx.fragment", name = "fragment", version.ref = "fragment" }
+play-services-nearby = { group = "com.google.android.gms", name = "play-services-nearby", version.ref = "nearby" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

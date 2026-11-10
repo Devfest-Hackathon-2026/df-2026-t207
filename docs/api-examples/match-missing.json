@@ -1,0 +1,18 @@
+{
+  "seen": {
+    "cardItemId": "c",
+    "slot": "shoes",
+    "category": "shoe",
+    "label": "パンプス",
+    "layer": "single",
+    "color": "レッド",
+    "pattern": "レオパード",
+    "image": "/v1/cards/c_7Hq2x/items/c/image"
+  },
+  "combos": [],
+  "missing": {
+    "slot": "bottom",
+    "description": "黒か濃いグレーの細めのパンツ (柄の強い靴を受け止める無地の物)"
+  },
+  "similarOwned": null
+}

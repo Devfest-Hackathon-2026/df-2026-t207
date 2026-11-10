@@ -1,0 +1,32 @@
+{
+  "seen": {
+    "cardItemId": "a",
+    "slot": "outer",
+    "category": "jacket",
+    "label": "デニムジャケット",
+    "layer": "outer",
+    "color": "ライトブルー",
+    "pattern": "バラの刺繍",
+    "image": "/v1/cards/c_7Hq2x/items/a/image"
+  },
+  "combos": [
+    {
+      "wardrobeItemIds": [
+        "w_05",
+        "w_01",
+        "w_03"
+      ],
+      "reason": "淡いデニムに白T とチャコールのワイドパンツで色の強さを抑え、白スニーカーで軽く見せられます"
+    },
+    {
+      "wardrobeItemIds": [
+        "w_04",
+        "w_02",
+        "w_03"
+      ],
+      "reason": "アイボリーのニットを中に入れると秋らしく、デニム同士でも色の濃さが違うので重く見えません"
+    }
+  ],
+  "missing": null,
+  "similarOwned": null
+}

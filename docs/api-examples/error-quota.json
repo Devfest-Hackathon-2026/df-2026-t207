@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "quota_exceeded",
+    "message": "今日の回数の上限に達しました"
+  }
+}

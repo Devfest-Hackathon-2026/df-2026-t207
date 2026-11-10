@@ -1,0 +1,105 @@
+{
+  "cards": [
+    {
+      "cardId": "c_Kp93m",
+      "image": "/v1/cards/c_Kp93m/image",
+      "seenAgoSec": 45,
+      "expiresAt": "2026-11-08T10:50:15+09:00",
+      "isDemo": false,
+      "items": [
+        {
+          "cardItemId": "a",
+          "slot": "outer",
+          "category": "vest",
+          "label": "ダウンベスト",
+          "layer": "outer",
+          "color": "ブラック",
+          "pattern": "無地",
+          "materialGuess": "ナイロン",
+          "image": "/v1/cards/c_Kp93m/items/a/image"
+        },
+        {
+          "cardItemId": "b",
+          "slot": "top",
+          "category": "sweater",
+          "label": "ニット",
+          "layer": "inner",
+          "color": "レッド",
+          "pattern": "リブ編み",
+          "image": "/v1/cards/c_Kp93m/items/b/image"
+        },
+        {
+          "cardItemId": "c",
+          "slot": "bottom",
+          "category": "pants",
+          "label": "ワイドパンツ",
+          "layer": "single",
+          "color": "ブラック",
+          "pattern": "無地",
+          "image": "/v1/cards/c_Kp93m/items/c/image"
+        },
+        {
+          "cardItemId": "d",
+          "slot": "shoes",
+          "category": "shoe",
+          "label": "白スニーカー",
+          "layer": "single",
+          "color": "ホワイト",
+          "pattern": "無地",
+          "image": "/v1/cards/c_Kp93m/items/d/image"
+        }
+      ]
+    },
+    {
+      "cardId": "c_7Hq2x",
+      "image": "/v1/cards/c_7Hq2x/image",
+      "seenAgoSec": 180,
+      "expiresAt": "2026-11-08T10:48:00+09:00",
+      "isDemo": false,
+      "items": [
+        {
+          "cardItemId": "a",
+          "slot": "outer",
+          "category": "jacket",
+          "label": "デニムジャケット",
+          "layer": "outer",
+          "color": "ライトブルー",
+          "pattern": "バラの刺繍",
+          "materialGuess": "デニム",
+          "image": "/v1/cards/c_7Hq2x/items/a/image"
+        },
+        {
+          "cardItemId": "b",
+          "slot": "dress",
+          "category": "dress",
+          "label": "ロングスカート",
+          "layer": "inner",
+          "color": "レッド",
+          "pattern": "無地",
+          "image": "/v1/cards/c_7Hq2x/items/b/image"
+        },
+        {
+          "cardItemId": "c",
+          "slot": "shoes",
+          "category": "shoe",
+          "label": "パンプス",
+          "layer": "single",
+          "color": "レッド",
+          "pattern": "レオパード",
+          "image": "/v1/cards/c_7Hq2x/items/c/image"
+        },
+        {
+          "cardItemId": "d",
+          "slot": "bag",
+          "category": "bag, wallet",
+          "label": "かごバッグ",
+          "layer": "single",
+          "color": "ベージュ",
+          "pattern": "編み",
+          "image": "/v1/cards/c_7Hq2x/items/d/image"
+        }
+      ]
+    }
+  ],
+  "viewerPublishing": true
+}

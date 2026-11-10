@@ -1,0 +1,12 @@
+# 改行は LF に固定する (Windows で CRLF になって差分が膨らむのを防ぐ)
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.jar binary
+*.onnx binary
+*.pt binary
+*.safetensors binary
